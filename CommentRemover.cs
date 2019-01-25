@@ -5,53 +5,92 @@ using System.Linq;
 
 namespace CommentRemover
 {
-    static class CommentRemover
+    class CommentRemover
     {
         private const string BeginStrOfOneLineCom = "//";
         private const string BeginStrOfMulLinesCom = "/*";
         private const string EndStrOfMulLinesCom = "*/";
 
-        public static void Remove(string rootFolder, string[] targetExtensions)
+        private string[] targetExtensions = new string[] { "*.cs", /* "*.cpp", "*.c", "*.h" */ };
+        private int removedLines = 0;
+        private int removedPartOfLines = 0;
+
+        public CommentRemover()
         {
-            List<string> files = GetFilesList(rootFolder, targetExtensions);
-            foreach (string file in files)
-            {
-                RemoveCommentOfOneFile(file);
-            }
         }
 
-        private static List<string> GetFilesList(string rootFolder, string[] targetExtensions)
+        public void Remove(string path)
         {
-            List<string> filesList = new List<string>();
+            removedLines = 0;
+            removedPartOfLines = 0;
+            if (Directory.Exists(path))
+            {
+                RemoveForDirectory(path);
+            }
+            else if (File.Exists(path))
+            {
+                RemoveForFile(path);
+            }
+            else
+            {
+                Console.WriteLine("{0} is not exists.", path);
+                return;
+            }
+            Console.WriteLine("Removed: {0} lines.", removedLines);
+            Console.WriteLine("Removed a part: {0} lines.", removedPartOfLines);
+        }
+
+        private List<string> GetFilesList(string rootDir)
+        {
+            var filesList = new List<string>();
             foreach (string extension in targetExtensions)
             {
-                string[] files = Directory.GetFiles(rootFolder, extension, SearchOption.AllDirectories);
+                string[] files = Directory.GetFiles(rootDir, extension, SearchOption.AllDirectories);
                 filesList.AddRange(files);
             }
             return filesList;
         }
 
-        private static void RemoveCommentOfOneFile(string file)
+        private void RemoveForDirectory(string path)
         {
-                string tmpFile = Path.GetTempFileName();
-                StreamReader sr = new StreamReader(file);
-                StreamWriter sw = new StreamWriter(tmpFile);
-                bool mulLinesCom = false;
-                while (sr.Peek() > -1)
-                {
-                    string line = TrimComment(sr.ReadLine(), ref mulLinesCom);
-                    if (line != null)
-                    {
-                        sw.WriteLine(line.TrimEnd(' '));
-                    }
-                }
-                sr.Close();
-                sw.Close();
-                File.Copy(tmpFile, file, true);
-                File.Delete(tmpFile);
+            var files = GetFilesList(path);
+            foreach (string file in files)
+            {
+                RemoveForFile(file);
+            }
         }
 
-        private static string TrimComment(string line, ref bool mulLinesCom)
+        private void RemoveForFile(string path)
+        {
+            bool mulLinesCom = false;
+            string tmpFile = Path.GetTempFileName();
+            using (StreamReader sr = new StreamReader(path))
+            using (StreamWriter sw = new StreamWriter(tmpFile))
+            {
+                while (sr.Peek() > -1)
+                {
+                    string orgLine = sr.ReadLine();
+                    string newLine = TrimComment(orgLine, ref mulLinesCom);
+                    if (newLine == null)
+                    {
+                        Console.WriteLine(orgLine);
+                        removedLines++;
+                    }
+                    else
+                    {
+                        if (orgLine != newLine)
+                        {
+                            removedPartOfLines++;
+                        }
+                        sw.WriteLine(newLine.TrimEnd(' '));
+                    }
+                }
+            }
+            File.Copy(tmpFile, path, true);
+            File.Delete(tmpFile);
+        }
+
+        private string TrimComment(string line, ref bool mulLinesCom)
         {
             if (mulLinesCom)
             {
@@ -81,7 +120,7 @@ namespace CommentRemover
             return line;
         }
 
-        private static string TrimMulLinesCom(string line, ref bool mulLinesCom)
+        private string TrimMulLinesCom(string line, ref bool mulLinesCom)
         {
             int endIdx = GetEndIdxOfMulLinesCom(line, 0);
             if (endIdx >= 0)
@@ -92,12 +131,13 @@ namespace CommentRemover
             return null;
         }
 
-        private static int GetBeginIdxOfComment(string line, ref bool mulLinesCom)
+        private int GetBeginIdxOfComment(string line, ref bool mulLinesCom)
         {
             int beginIdxOfOneLineCom = GetBeginIdx(line, BeginStrOfOneLineCom);
             int beginIdxOfMulLinesCom = GetBeginIdx(line, BeginStrOfMulLinesCom);
             if (beginIdxOfOneLineCom >= 0 && beginIdxOfMulLinesCom >= 0)
             {
+                mulLinesCom = (beginIdxOfMulLinesCom < beginIdxOfOneLineCom);
                 return Math.Min(beginIdxOfOneLineCom, beginIdxOfMulLinesCom);
             }
             else if (beginIdxOfOneLineCom >= 0 && beginIdxOfMulLinesCom < 0)
@@ -112,9 +152,9 @@ namespace CommentRemover
             return -1;
         }
 
-        private static int GetBeginIdx(string line, string beginStr)
+        private int GetBeginIdx(string line, string beginStr)
         {
-            Dictionary<int, int> strFields = GetStringFields(line);
+            var strFields = GetStringFields(line);
             for (int i = 0; i <= line.Length - beginStr.Length; i++)
             {
                 // skip string field
@@ -131,7 +171,7 @@ namespace CommentRemover
             return -1;
         }
 
-        private static int GetEndIdxOfMulLinesCom(string line, int beginIdx)
+        private int GetEndIdxOfMulLinesCom(string line, int beginIdx)
         {
             for (int i = beginIdx; i < line.Length - 1; i++)
             {
@@ -145,9 +185,9 @@ namespace CommentRemover
 
         // Key: begin index of string
         // Value: end index of string
-        private static Dictionary<int, int> GetStringFields(string line)
+        private Dictionary<int, int> GetStringFields(string line)
         {
-            Dictionary<int, int> dic = new Dictionary<int, int>();
+            var dic = new Dictionary<int, int>();
             int i = 0;
             int beginIdx = 0;
             while ((beginIdx = line.IndexOf('"', i)) > 0)
@@ -164,7 +204,7 @@ namespace CommentRemover
             return dic;
         }
 
-        private static int GetEndIdxOfString(string line, int beginIdx, bool isLiteral)
+        private int GetEndIdxOfString(string line, int beginIdx, bool isLiteral)
         {
             int i = beginIdx + 1;
             while (i < line.Length)
@@ -183,7 +223,7 @@ namespace CommentRemover
             return i;
         }
 
-        private static bool IsEscSeq(string line, int index, bool isLiteral)
+        private bool IsEscSeq(string line, int index, bool isLiteral)
         {
             bool isEscSeq = false;
             if (index < line.Length - 1)
