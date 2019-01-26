@@ -7,20 +7,23 @@ namespace CommentRemover
 {
     class CommentRemover
     {
-        private const string BeginStrOfOneLineCom = "//";
-        private const string BeginStrOfMulLinesCom = "/*";
-        private const string EndStrOfMulLinesCom = "*/";
+        private const string BeginStrOfSglLineCom = "//";
+        private const string BeginStrOfMulLineCom = "/*";
+        private const string EndStrOfMulLineCom = "*/";
 
-        private string[] targetExtensions = new string[] { "*.cs", /* "*.cpp", "*.c", "*.h" */ };
+        private string[] targetExtensions = null;
+        private int rewrittenFiles = 0;
         private int removedLines = 0;
         private int removedPartOfLines = 0;
 
         public CommentRemover()
         {
+            targetExtensions = new string[] { "*.cs" };
         }
 
         public void Remove(string path)
         {
+            rewrittenFiles = 0;
             removedLines = 0;
             removedPartOfLines = 0;
             if (Directory.Exists(path))
@@ -33,11 +36,8 @@ namespace CommentRemover
             }
             else
             {
-                Console.WriteLine("{0} is not exists.", path);
-                return;
+                Console.WriteLine("[WARN]: {0} is not exists.", path);
             }
-            Console.WriteLine("Removed: {0} lines.", removedLines);
-            Console.WriteLine("Removed a part: {0} lines.", removedPartOfLines);
         }
 
         private List<string> GetFilesList(string rootDir)
@@ -53,27 +53,45 @@ namespace CommentRemover
 
         private void RemoveForDirectory(string path)
         {
+            Console.WriteLine("[Dir]: {0}", path);
             var files = GetFilesList(path);
             foreach (string file in files)
             {
-                RemoveForFile(file);
+                RemoveForOneFile(file);
             }
+            Console.WriteLine("  {0} files rewritten. (included {1} files in directory.)", rewrittenFiles, files.Count);
+            Console.WriteLine("  {0} lines removed.", removedLines);
+            Console.WriteLine("  {0} lines removed a part.", removedPartOfLines);
         }
 
         private void RemoveForFile(string path)
         {
-            bool mulLinesCom = false;
+            bool isTargetExtension = targetExtensions.Contains("*" + Path.GetExtension(path));
+            if (!isTargetExtension)
+            {
+                Console.WriteLine("[WARN]: The extension of {0} is out of target.", path);
+                return;
+            }
+
+            Console.WriteLine("[File]: {0}", path);
+            RemoveForOneFile(path);
+            Console.WriteLine("  {0} lines removed.", removedLines);
+            Console.WriteLine("  {0} lines removed a part.", removedPartOfLines);
+        }
+
+        private void RemoveForOneFile(string path)
+        {
             string tmpFile = Path.GetTempFileName();
             using (StreamReader sr = new StreamReader(path))
             using (StreamWriter sw = new StreamWriter(tmpFile))
             {
+                bool mulLinesCom = false;
                 while (sr.Peek() > -1)
                 {
                     string orgLine = sr.ReadLine();
                     string newLine = TrimComment(orgLine, ref mulLinesCom);
                     if (newLine == null)
                     {
-                        Console.WriteLine(orgLine);
                         removedLines++;
                     }
                     else
@@ -82,11 +100,17 @@ namespace CommentRemover
                         {
                             removedPartOfLines++;
                         }
-                        sw.WriteLine(newLine.TrimEnd(' '));
+                        sw.WriteLine(newLine);
                     }
                 }
             }
-            File.Copy(tmpFile, path, true);
+
+            bool fileIsRewritten = (removedLines > 0 || removedPartOfLines > 0);
+            if (fileIsRewritten)
+            {
+                rewrittenFiles++;
+                File.Copy(tmpFile, path, true);
+            }
             File.Delete(tmpFile);
         }
 
@@ -108,7 +132,7 @@ namespace CommentRemover
                 line = orgLine.Remove(beginComIdx);
                 if (mulLinesCom)
                 {
-                    string afterLineOfComIdx = orgLine.Remove(0, beginComIdx + BeginStrOfMulLinesCom.Length);
+                    string afterLineOfComIdx = orgLine.Remove(0, beginComIdx + BeginStrOfMulLineCom.Length);
                     line += TrimComment(afterLineOfComIdx, ref mulLinesCom);
                 }
                 if (line.Trim().Length == 0)
@@ -133,21 +157,21 @@ namespace CommentRemover
 
         private int GetBeginIdxOfComment(string line, ref bool mulLinesCom)
         {
-            int beginIdxOfOneLineCom = GetBeginIdx(line, BeginStrOfOneLineCom);
-            int beginIdxOfMulLinesCom = GetBeginIdx(line, BeginStrOfMulLinesCom);
-            if (beginIdxOfOneLineCom >= 0 && beginIdxOfMulLinesCom >= 0)
+            int beginIdxOfSglLineCom = GetBeginIdx(line, BeginStrOfSglLineCom);
+            int beginIdxOfMulLineCom = GetBeginIdx(line, BeginStrOfMulLineCom);
+            if (beginIdxOfSglLineCom >= 0 && beginIdxOfMulLineCom >= 0)
             {
-                mulLinesCom = (beginIdxOfMulLinesCom < beginIdxOfOneLineCom);
-                return Math.Min(beginIdxOfOneLineCom, beginIdxOfMulLinesCom);
+                mulLinesCom = (beginIdxOfMulLineCom < beginIdxOfSglLineCom);
+                return Math.Min(beginIdxOfSglLineCom, beginIdxOfMulLineCom);
             }
-            else if (beginIdxOfOneLineCom >= 0 && beginIdxOfMulLinesCom < 0)
+            else if (beginIdxOfSglLineCom >= 0)
             {
-                return beginIdxOfOneLineCom;
+                return beginIdxOfSglLineCom;
             }
-            else if (beginIdxOfOneLineCom < 0 && beginIdxOfMulLinesCom >= 0)
+            else if (beginIdxOfMulLineCom >= 0)
             {
                 mulLinesCom = true;
-                return beginIdxOfMulLinesCom;
+                return beginIdxOfMulLineCom;
             }
             return -1;
         }
@@ -175,7 +199,7 @@ namespace CommentRemover
         {
             for (int i = beginIdx; i < line.Length - 1; i++)
             {
-                if (line.Substring(i, EndStrOfMulLinesCom.Length) == EndStrOfMulLinesCom)
+                if (line.Substring(i, EndStrOfMulLineCom.Length) == EndStrOfMulLineCom)
                 {
                     return i + 1;
                 }

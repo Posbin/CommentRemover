@@ -1,18 +1,57 @@
 CommentRemover
 =========
 
-## 概要
-指定フォルダ配下のファイルからコメント部分を一括削除させます。  
-コメントを削除させたいファイル拡張子（*.cs, *.h, *.cppなど）は変更可能。  
+## Overview
+CommnetRemover is tool of removing comment for C# code.
+## Description
+The elimination targets is below.
+* Single line comments
+ ```
+// for single line comments
+```
+* Multiple line comments 「/* ~ */」
+```
+/* for multi line comments */
+```
+* XML tags comments
+```
+/// XML tags displayed in a code comment
+```
 
-## 削除対象のコメント
-* 行末までのコメント 「// ~ 」  
-* 複数行コメント 「/* ~ */」  
+Before:  
+```
+/*
+Any comments
+*/
+Console.Write("Hello ");
+Console.Write(/*Hello*/"Wolrd");//int i = 0;
+//Console.Write("World");
+Console.WriteLine("!!");
+```
+After:
+```
+Console.Write("Hello ");
+Console.Write("Wolrd");
+Console.WriteLine("!!");
+```
 
-## 動作
-* コメントのみの行は空行とみなし、行ごと削除される
-* 一行内にコメントが混在していても大丈夫  
-/\*hogehoge\*/Console.WriteLine(/\*100\*/"Hello Wolrd!!");//int i = 0;  
-&darr;  
-Console.WriteLine("Hello Wolrd!!");
-* 文字列中（"で囲まれている部分）の「//、/\*、\*/」はもちろん無視
+## Usage
+```
+$ cd ./CommentRemover
+$ dotnet run [file or directory]
+```
+Output example:
+```
+$ cd ./CommentRemover
+$ dotnet run ../file01.cs ../dir01 ../file02.cs
+[File]: ../file01.cs
+  84 lines removed.
+  116 lines removed a part.
+[Dir]: ../dir01
+  10 files rewritten. (included 15 files in directory.)
+  1996 lines removed.
+  21 lines removed a part.
+[File]: ../file02.cs
+  6 lines removed.
+  67 lines removed a part.
+```
