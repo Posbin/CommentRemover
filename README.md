@@ -9,7 +9,7 @@ The elimination targets is below.
  ```
 // for single line comments
 ```
-* Multiple line comments 「/* ~ */」
+* Multiple line comments
 ```
 /* for multi line comments */
 ```
@@ -18,7 +18,7 @@ using *-x* option so as to remove this type.
 ```
 /// XML tags displayed in a code comment
 ```
-
+### Example
 Before:  
 ```
 /*
@@ -41,7 +41,7 @@ Console.WriteLine("!!");
 $ cd ./CommentRemover
 $ dotnet run [-x] [file or directory]
 ```
-Output example:
+### Output example
 ```
 $ cd ./CommentRemover
 $ dotnet run ../file01.cs ../dir01 ../file02.cs
