@@ -13,7 +13,8 @@ The elimination targets is below.
 ```
 /* for multi line comments */
 ```
-* XML tags comments
+* XML tags comments  
+using *-x* option so as to remove this type.
 ```
 /// XML tags displayed in a code comment
 ```
@@ -38,7 +39,7 @@ Console.WriteLine("!!");
 ## Usage
 ```
 $ cd ./CommentRemover
-$ dotnet run [file or directory]
+$ dotnet run [-x] [file or directory]
 ```
 Output example:
 ```

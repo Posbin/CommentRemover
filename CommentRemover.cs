@@ -7,25 +7,28 @@ namespace CommentRemover
 {
     class CommentRemover
     {
+        private const string BeginStrOfXmlTagsCom = "/// ";
         private const string BeginStrOfSglLineCom = "//";
         private const string BeginStrOfMulLineCom = "/*";
         private const string EndStrOfMulLineCom = "*/";
 
         private string[] targetExtensions = null;
+        private bool removingXmlTags = false;
         private int rewrittenFiles = 0;
-        private int removedLines = 0;
-        private int removedPartOfLines = 0;
+        private int rmLinesSum = 0;
+        private int rmPartsSum = 0;
 
-        public CommentRemover()
+        public CommentRemover(bool removingXmlTags)
         {
             targetExtensions = new string[] { "*.cs" };
+            this.removingXmlTags = removingXmlTags;
         }
 
         public void Remove(string path)
         {
             rewrittenFiles = 0;
-            removedLines = 0;
-            removedPartOfLines = 0;
+            rmLinesSum = 0;
+            rmPartsSum = 0;
             if (Directory.Exists(path))
             {
                 RemoveForDirectory(path);
@@ -60,8 +63,8 @@ namespace CommentRemover
                 RemoveForOneFile(file);
             }
             Console.WriteLine("  {0} files rewritten. (included {1} files in directory.)", rewrittenFiles, files.Count);
-            Console.WriteLine("  {0} lines removed.", removedLines);
-            Console.WriteLine("  {0} lines removed a part.", removedPartOfLines);
+            Console.WriteLine("  {0} lines removed.", rmLinesSum);
+            Console.WriteLine("  {0} lines removed a part.", rmPartsSum);
         }
 
         private void RemoveForFile(string path)
@@ -75,65 +78,70 @@ namespace CommentRemover
 
             Console.WriteLine("[File]: {0}", path);
             RemoveForOneFile(path);
-            Console.WriteLine("  {0} lines removed.", removedLines);
-            Console.WriteLine("  {0} lines removed a part.", removedPartOfLines);
+            Console.WriteLine("  {0} lines removed.", rmLinesSum);
+            Console.WriteLine("  {0} lines removed a part.", rmPartsSum);
         }
 
         private void RemoveForOneFile(string path)
         {
+            int rmLines = 0;
+            int rmParts = 0;
             string tmpFile = Path.GetTempFileName();
             using (StreamReader sr = new StreamReader(path))
             using (StreamWriter sw = new StreamWriter(tmpFile))
             {
-                bool mulLinesCom = false;
+                bool mulLineCom = false;
                 while (sr.Peek() > -1)
                 {
                     string orgLine = sr.ReadLine();
-                    string newLine = TrimComment(orgLine, ref mulLinesCom);
+                    string newLine = TrimComment(orgLine, ref mulLineCom);
                     if (newLine == null)
                     {
-                        removedLines++;
+                        rmLines++;
                     }
                     else
                     {
                         if (orgLine != newLine)
                         {
-                            removedPartOfLines++;
+                            rmParts++;
                         }
                         sw.WriteLine(newLine);
                     }
                 }
             }
 
-            bool fileIsRewritten = (removedLines > 0 || removedPartOfLines > 0);
+            bool fileIsRewritten = (rmLines > 0 || rmParts > 0);
             if (fileIsRewritten)
             {
                 rewrittenFiles++;
                 File.Copy(tmpFile, path, true);
             }
             File.Delete(tmpFile);
+
+            rmLinesSum += rmLines;
+            rmPartsSum += rmParts;
         }
 
-        private string TrimComment(string line, ref bool mulLinesCom)
+        private string TrimComment(string line, ref bool mulLineCom)
         {
-            if (mulLinesCom)
+            if (mulLineCom)
             {
-                line = TrimMulLinesCom(line, ref mulLinesCom);
+                line = TrimMulLineCom(line, ref mulLineCom);
                 if (line == null || line.Trim().Length == 0)
                 {
                     // The line is comment only.
                     return null;
                 }
             }
-            int beginComIdx = GetBeginIdxOfComment(line, ref mulLinesCom);
-            if (beginComIdx >= 0)
+            int beginComIdx = 0;
+            if (HasBeginIdxOfComment(line, ref mulLineCom, ref beginComIdx))
             {
                 string orgLine = line;
                 line = orgLine.Remove(beginComIdx);
-                if (mulLinesCom)
+                if (mulLineCom)
                 {
                     string afterLineOfComIdx = orgLine.Remove(0, beginComIdx + BeginStrOfMulLineCom.Length);
-                    line += TrimComment(afterLineOfComIdx, ref mulLinesCom);
+                    line += TrimComment(afterLineOfComIdx, ref mulLineCom);
                 }
                 if (line.Trim().Length == 0)
                 {
@@ -144,42 +152,21 @@ namespace CommentRemover
             return line;
         }
 
-        private string TrimMulLinesCom(string line, ref bool mulLinesCom)
+        private string TrimMulLineCom(string line, ref bool mulLineCom)
         {
-            int endIdx = GetEndIdxOfMulLinesCom(line, 0);
-            if (endIdx >= 0)
+            int endIdx = 0;
+            if (HasEndIdxOfMulLineCom(line, ref endIdx))
             {
-                mulLinesCom = false;
+                mulLineCom = false;
                 return line.Remove(0, endIdx + 1);
             }
             return null;
         }
 
-        private int GetBeginIdxOfComment(string line, ref bool mulLinesCom)
-        {
-            int beginIdxOfSglLineCom = GetBeginIdx(line, BeginStrOfSglLineCom);
-            int beginIdxOfMulLineCom = GetBeginIdx(line, BeginStrOfMulLineCom);
-            if (beginIdxOfSglLineCom >= 0 && beginIdxOfMulLineCom >= 0)
-            {
-                mulLinesCom = (beginIdxOfMulLineCom < beginIdxOfSglLineCom);
-                return Math.Min(beginIdxOfSglLineCom, beginIdxOfMulLineCom);
-            }
-            else if (beginIdxOfSglLineCom >= 0)
-            {
-                return beginIdxOfSglLineCom;
-            }
-            else if (beginIdxOfMulLineCom >= 0)
-            {
-                mulLinesCom = true;
-                return beginIdxOfMulLineCom;
-            }
-            return -1;
-        }
-
-        private int GetBeginIdx(string line, string beginStr)
+        private bool HasBeginIdxOfComment(string line, ref bool mulLineCom, ref int beginIdx)
         {
             var strFields = GetStringFields(line);
-            for (int i = 0; i <= line.Length - beginStr.Length; i++)
+            for (int i = 0; i <= line.Length; i++)
             {
                 // skip string field
                 if (strFields.Keys.Contains(i))
@@ -187,24 +174,50 @@ namespace CommentRemover
                     i = strFields[i];
                     continue;
                 }
-                if (line.Substring(i, beginStr.Length) == beginStr)
+
+                // XML tags comments
+                if (IsBeginIndex(line, i, BeginStrOfXmlTagsCom))
                 {
-                    return i;
+                    if (removingXmlTags)
+                    {
+                        beginIdx = i;
+                        return true;
+                    }
+                    break;
+                }
+                // Single line comments
+                if (IsBeginIndex(line, i, BeginStrOfSglLineCom))
+                {
+                    beginIdx = i;
+                    return true;
+                }
+                // Multiple line comments
+                if (IsBeginIndex(line, i, BeginStrOfMulLineCom))
+                {
+                    mulLineCom = true;
+                    beginIdx = i;
+                    return true;
                 }
             }
-            return -1;
+            return false;
         }
 
-        private int GetEndIdxOfMulLinesCom(string line, int beginIdx)
+        private bool IsBeginIndex(string line, int index, string str)
         {
-            for (int i = beginIdx; i < line.Length - 1; i++)
+            return (index <= line.Length - str.Length) && (line.Substring(index, str.Length) == str);
+        }
+
+        private bool HasEndIdxOfMulLineCom(string line, ref int endIdx)
+        {
+            for (int i = 0; i < line.Length - 1; i++)
             {
                 if (line.Substring(i, EndStrOfMulLineCom.Length) == EndStrOfMulLineCom)
                 {
-                    return i + 1;
+                    endIdx = i + 1;
+                    return true;
                 }
             }
-            return -1;
+            return false;
         }
 
         // Key: begin index of string
